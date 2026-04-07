@@ -246,14 +246,14 @@ app.get('/', (req, res) => {
           async function startBot() {
             const r = await fetch('/start', { method: 'POST' });
             const data = await r.json();
-            alert(data.success ? 'Bot started!' : data.msg);
+            if (data.success) alert('Started');
             update();
           }
 
           async function stopBot() {
             const r = await fetch('/stop', { method: 'POST' });
             const data = await r.json();
-            alert(data.success ? 'Bot stopped!' : data.msg);
+            if (data.success) alert('Stopped');
             update();
           }
 
@@ -1282,7 +1282,7 @@ function createBot() {
         bot = null;
         scheduleReconnect();
       }
-    }, 150000); // 150s - Aternos servers can take 90-120s to finish spawning a player
+    }, 240000); // 240s - Aternos servers can take up to 180s+ to finish spawning a player
 
     // FIX: guard against spawn firing twice (can happen on some servers)
     let spawnHandled = false;
