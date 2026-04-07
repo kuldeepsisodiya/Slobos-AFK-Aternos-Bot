@@ -1089,11 +1089,23 @@ function formatUptime(seconds) {
 // ============================================================
 const SELF_PING_INTERVAL = 10 * 60 * 1000;
 
+function getSelfPingUrl() {
+  const renderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderExternalUrl) return renderExternalUrl;
+
+  if (process.env.KEEPALIVE_URL) return process.env.KEEPALIVE_URL;
+  if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+    return `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`;
+  }
+
+  return null;
+}
+
 function startSelfPing() {
-  const renderUrl = process.env.RENDER_EXTERNAL_URL;
+  const renderUrl = getSelfPingUrl();
   if (!renderUrl) {
     addLog(
-      "[KeepAlive] No RENDER_EXTERNAL_URL set - self-ping disabled (running locally)",
+      "[KeepAlive] No keepalive URL found (RENDER_EXTERNAL_URL/KEEPALIVE_URL), self-ping disabled",
     );
     return;
   }
@@ -1135,6 +1147,34 @@ let activeIntervals = [];
 let reconnectTimeoutId = null;
 let connectionTimeoutId = null;
 let isReconnecting = false;
+
+function isAutoReconnectEnabled() {
+  return !(config.utils && config.utils["auto-reconnect"] === false);
+}
+
+function resolveBotVersion(rawVersion) {
+  if (typeof rawVersion !== "string") return false;
+  const normalized = rawVersion.trim().toLowerCase();
+  if (
+    !normalized ||
+    normalized === "auto" ||
+    normalized === "latest" ||
+    normalized === "false" ||
+    normalized === "*"
+  ) {
+    return false;
+  }
+
+  // Guard against invalid version strings that would block login.
+  if (!/^\d+\.\d+(\.\d+)?$/.test(normalized)) {
+    addLog(
+      `[Bot] Invalid version \"${rawVersion}\" in settings.json, falling back to auto-detect`,
+    );
+    return false;
+  }
+
+  return normalized;
+}
 
 function clearBotTimeouts() {
   if (reconnectTimeoutId) {
@@ -1190,6 +1230,11 @@ function createBot() {
     return;
   }
 
+  if (!botRunning) {
+    addLog("[Bot] Start skipped because bot is stopped by control panel");
+    return;
+  }
+
   // Cleanup previous bot properly to avoid ghost bots
   if (bot) {
     clearAllIntervals();
@@ -1208,10 +1253,8 @@ function createBot() {
   try {
     // FIX: use version:false to auto-detect server version so the bot can join any server.
     // If the user explicitly sets a version in settings.json it is still respected.
-    const botVersion =
-      config.server.version && config.server.version.trim() !== ""
-        ? config.server.version
-        : false;
+    const botVersion = resolveBotVersion(config.server.version);
+    addLog(`[Bot] Version mode: ${botVersion || "auto-detect"}`);
     bot = mineflayer.createBot({
       username: config["bot-account"].username,
       password: config["bot-account"].password || undefined,
@@ -1369,6 +1412,18 @@ function createBot() {
 
 function scheduleReconnect() {
   clearBotTimeouts();
+
+  if (!botRunning) {
+    addLog("[Bot] Reconnect cancelled because bot is stopped by control panel");
+    isReconnecting = false;
+    return;
+  }
+
+  if (!isAutoReconnectEnabled()) {
+    addLog("[Bot] Auto-reconnect disabled in settings.json");
+    isReconnecting = false;
+    return;
+  }
 
   // FIX: don't stack reconnect if already waiting
   if (isReconnecting) {

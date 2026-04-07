@@ -8,7 +8,7 @@
   "server": {
     "ip": "Kuldeep01.aternos.me",
     "port": 27075,
-    "version": "1.21.9",
+    "version": "auto",
     "try-creative": false
   },
   "position": {
